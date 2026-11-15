@@ -538,6 +538,28 @@ pre-mutation file):
   separately recorded (R8): with pool = 1 each parse's chunks are
   serialized, so the same blindness as the first case is expected.
 
+> **Case file — "once per session", decided by whichever chunk got there.** At `=16` the stress
+> test failed about once in seven runs with one typed parse reading `when=null` for a
+> `jdk.GCHeapSummary` whose reference had `when=After GC`; a typed-only probe (8 concurrent parses,
+> 150 rounds) showed whole parses with `when() == null` for all 1,892 events, never single events.
+> The cause was in the parser, not in a listener: `TypedJafarParserImpl` kept the closure of types
+> its handlers reference in one field of the per-parse listener, filled it "once per session"
+> behind an unsynchronized `== null` check in `onMetadata`, and installed a constant pool
+> `TypeFilter` that read the field on every call. `tck-test.jfr`'s chunk 2 declares 53 types, not
+> the 287 of chunk 1, and neither `jdk.GCHeapSummary` nor `jdk.types.GCWhen`. When both chunk
+> threads saw the field unset both computed, and if chunk 2 stored last, chunk 1's filter held only
+> the handler root names (`jdk.GCHeapSummary`, `java.lang.String`, `long`, `int`), skipped the
+> `jdk.types.GCWhen` pool, and the generated getter returned `null` for a pool that is not there.
+> Unfixed, a metadata-only loop hit that state once or twice in 3,000 parses. Now each chunk
+> computes the closure from its own metadata and its filter captures it. Pinned by
+> `TypedChunkTypeFilterTest` (parser-codegen), which sets its own parallelism: on the old code it
+> failed in 9 of 9 runs (`-Pjafar.activeProcessorCount=` 16, 4, 2 and 1), the race test at
+> iteration 33 to 468 of 2,000, the deterministic test because chunk 2 had no filter at all. After
+> the fix the probe read `nullWhen=0` in 5 of 5 runs at `=16`. This is the hazard lint below
+> broken by the parser itself: a field written in a chunk callback and not keyed by chunk. **A
+> lambda that reads a field is not a snapshot of it, and "computed once" from per-chunk metadata
+> means "computed from an arbitrary chunk".**
+
 **Times.** Measured warm, as separate invocations, in the step-5 task
 reports: the determinism nets 10 s at `=1` / 6 s at `=16`; the abort + golden
 suites ~4 s / ~3 s; the stress test ~8 s / ~7.3 s (5.5 s test method). The

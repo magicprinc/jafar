@@ -215,7 +215,6 @@ public final class TypedJafarParserImpl implements TypedJafarParser {
           private final AtomicBoolean aborted = new AtomicBoolean();
           private final ThreadLocal<Control> control =
               ThreadLocal.withInitial(() -> new ControlImpl(aborted));
-          private Set<String> referencedTypes = null;
 
           @Override
           public void onRecordingStart(ParserContext context) {
@@ -289,10 +288,15 @@ public final class TypedJafarParserImpl implements TypedJafarParser {
               }
             }
 
-            // Build transitive closure of all types referenced by registered handlers (once per
-            // session)
-            if (!globalHandlerMap.isEmpty() && referencedTypes == null) {
-              referencedTypes = computeReferencedTypes(context, globalHandlerMap.keySet());
+            // Transitive closure of the types the registered handlers reference, computed from
+            // this chunk's own metadata and captured by this chunk's own filter. Chunks are parsed
+            // concurrently and need not declare the same types, so the closure must not be shared:
+            // a set computed from a chunk that does not declare a handled event type holds only
+            // the handler root names, and as another chunk's filter it skips that chunk's
+            // constant pools - every pooled field of the handled events then reads as null.
+            if (!globalHandlerMap.isEmpty()) {
+              Set<String> referencedTypes =
+                  computeReferencedTypes(context, globalHandlerMap.keySet());
               lContext.setTypeFilter(t -> t != null && referencedTypes.contains(t.getName()));
             }
 
