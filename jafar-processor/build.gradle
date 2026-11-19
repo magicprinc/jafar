@@ -14,6 +14,9 @@ repositories {
 
 // parser-core must be configured first for its sourceSets (test helpers) to exist
 evaluationDependsOn(':parser-core')
+// Resolved outside `dependencies {}` on purpose: inside it `project(':parser-core')` is a
+// ProjectDependency, and Gradle 9 no longer exposes project properties through that object.
+def parserCoreTestOutput = project(':parser-core').sourceSets.test.output
 
 dependencies {
     implementation project(':parser-core')
@@ -28,7 +31,7 @@ dependencies {
     // End-to-end tests: write recordings with the JMC writer and run the generated handlers on them
     testImplementation 'org.openjdk.jmc:flightrecorder.writer:8.2.1'
     // NestedArrayFixture, built with parser-core's SyntheticRecording test helper
-    testImplementation project(':parser-core').sourceSets.test.output
+    testImplementation parserCoreTestOutput
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

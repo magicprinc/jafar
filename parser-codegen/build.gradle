@@ -7,6 +7,9 @@ plugins {
 apply from: rootProject.file('gradle/version-from-tag.gradle')
 
 evaluationDependsOn ':parser-core'
+// Resolved outside `dependencies {}` on purpose: inside it `project(':parser-core')` is a
+// ProjectDependency, and Gradle 9 no longer exposes project properties through that object.
+def parserCoreTestOutput = project(':parser-core').sourceSets.test.output
 
 def libraryName="jafar-parser-codegen"
 def component_version = project.hasProperty("jafar_version") ? project.jafar_version : project.version
@@ -192,7 +195,7 @@ dependencies {
     implementation 'org.ow2.asm:asm:9.7.1'
     implementation 'org.slf4j:slf4j-api:2.0.5'
 
-    testImplementation project(':parser-core').sourceSets.test.output
+    testImplementation parserCoreTestOutput
     testImplementation 'org.assertj:assertj-core:3.24.2'
     testImplementation 'org.openjdk.jmc:flightrecorder.writer:8.2.1'
     testImplementation 'org.mockito:mockito-core:5.12.0'
