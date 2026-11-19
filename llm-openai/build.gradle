@@ -2,6 +2,8 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'com.vanniktech.maven.publish'
+    id 'io.freefair.lombok' version '9.8.3'
+    id 'net.ltgt.errorprone' version '5.2.0'
 }
 
 // Per-plane tag-derived version (see gradle/version-from-tag.gradle)
@@ -20,7 +22,16 @@ java {
     }
 }
 
+lombok {
+    version = '1.18.48'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone.disableWarningsInGeneratedCode = true
+}
+
 dependencies {
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
     // No provider SDK: the OpenAI chat-completions shape is small enough to speak directly with
     // the JDK's HttpClient. The shell provides shell-core (the SPI) at runtime, so this module's
     // jar alone resolves everything it needs off its POM at install time.
