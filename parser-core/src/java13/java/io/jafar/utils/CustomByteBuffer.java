@@ -9,6 +9,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public interface CustomByteBuffer {
+  static CustomByteBuffer wrap(byte[] bytes) {
+    return new ByteBufferWrapper(ByteBuffer.wrap(bytes));
+  }
+
   static CustomByteBuffer map(Path channel) throws IOException {
     return map(channel, Integer.MAX_VALUE);
   }
