@@ -1,6 +1,6 @@
 # Jafar Agent Pilot — Implementation Plan
 
-> Handoff to the next implementer. Read this file and [repo verification rules](../doc/agents/Verification.md) first. Use `executing-plans` for inline implementation, or `subagent-driven-development` only if the owner authorizes delegation and the active harness rules permit it. This plan is a proposal, not approval to change public parser lifetimes, install tooling, publish, or switch off MCP.
+> **Archived WIP; not a release plan.** The unfinished Java/Gradle and mapping work was saved on `wip/java25-hprof` rather than shipped. The supported route uses the official 0.29.0 artifact and the [on-demand profiling launcher](profiling/README.md). Sections below preserve the historical plan and test evidence, not current operating instructions.
 
 **Goal:** Give agents a tested, local, on-demand profiler quickly, then spend further effort on reported workflows and on demonstrated release blockers.
 
