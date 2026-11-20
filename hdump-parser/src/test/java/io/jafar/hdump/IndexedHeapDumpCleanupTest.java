@@ -1,6 +1,7 @@
 package io.jafar.hdump;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -8,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.jafar.hdump.api.HeapDump;
 import io.jafar.hdump.api.HeapDumpParser;
 import io.jafar.hdump.api.HeapDumpParser.ParserOptions;
+import io.jafar.hdump.api.HeapObject;
 import io.jafar.hdump.index.IndexFormat;
 import io.jafar.hdump.index.IndexWriter;
 import io.jafar.hdump.test.SyntheticHeapDumpGenerator;
@@ -114,6 +116,7 @@ class IndexedHeapDumpCleanupTest {
     Path offsets = index.resolve(IndexFormat.CLASSINSTANCES_OFFSET_INDEX_NAME);
     try (HeapDump initial = HeapDumpParser.parse(heap, INDEXED)) {
       assertEquals(10, initial.getObjectCount());
+      assertTrue(initial.hasClassInstancesIndex());
     }
     assertTrue(Files.isRegularFile(offsets));
     assertTrue(Files.isRegularFile(data));
@@ -134,6 +137,11 @@ class IndexedHeapDumpCleanupTest {
             })) {
       assertEquals(0, Files.readAllBytes(data)[0]);
       assertEquals(10, reloaded.getObjects().count());
+      assertFalse(reloaded.hasClassInstancesIndex());
+      var objectClass = reloaded.getClassById(100).orElseThrow();
+      assertEquals(
+          java.util.List.of(1000L, 1002L, 1004L, 1006L, 1008L),
+          reloaded.getObjectsOfClassFast(objectClass).map(HeapObject::getId).sorted().toList());
       Files.delete(offsets); // Windows: mapping должен быть закрыт уже при fallback, до close().
     }
   }
