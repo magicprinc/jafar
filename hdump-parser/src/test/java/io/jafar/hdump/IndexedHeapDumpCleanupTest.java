@@ -1,5 +1,6 @@
 package io.jafar.hdump;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -102,6 +103,39 @@ class IndexedHeapDumpCleanupTest {
 
     deleteRecursively(indexDir(heap));
     Files.delete(heap);
+  }
+
+  @Test
+  @DisplayName("Сбой открытия data-индекса сохраняет обычный поиск и освобождает offset mapping")
+  void optionalDataIndexFailureReleasesOffsetMapping() throws IOException {
+    Path heap = heap("broken-optional-index.hprof");
+    Path index = indexDir(heap);
+    Path data = index.resolve(IndexFormat.CLASSINSTANCES_DATA_INDEX_NAME);
+    Path offsets = index.resolve(IndexFormat.CLASSINSTANCES_OFFSET_INDEX_NAME);
+    try (HeapDump initial = HeapDumpParser.parse(heap, INDEXED)) {
+      assertEquals(10, initial.getObjectCount());
+    }
+    assertTrue(Files.isRegularFile(offsets));
+    assertTrue(Files.isRegularFile(data));
+
+    try (HeapDump reloaded =
+        HeapDumpParser.parse(
+            heap,
+            INDEXED,
+            (progress, message) -> {
+              if ("Loading retained sizes".equals(message)) {
+                // После успешной проверки заголовков оставляем оба файла, но портим magic data.
+                try {
+                  Files.write(data, new byte[20]);
+                } catch (IOException e) {
+                  throw new java.io.UncheckedIOException(e);
+                }
+              }
+            })) {
+      assertEquals(0, Files.readAllBytes(data)[0]);
+      assertEquals(10, reloaded.getObjects().count());
+      Files.delete(offsets); // Windows: mapping должен быть закрыт уже при fallback, до close().
+    }
   }
 
   @Test

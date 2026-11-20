@@ -7,6 +7,8 @@ import io.jafar.hdump.api.HeapDumpParser;
 import io.jafar.hdump.api.HeapDumpParser.ParserOptions;
 import io.jafar.hdump.api.HeapObject;
 import io.jafar.hdump.api.PathStep;
+import io.jafar.hdump.index.ClassInstancesDataReader;
+import io.jafar.hdump.index.ClassInstancesOffsetReader;
 import io.jafar.hdump.index.InboundCountReader;
 import io.jafar.hdump.index.InboundIndexBuilder;
 import io.jafar.hdump.index.IndexFormat;
@@ -73,10 +75,8 @@ public final class HeapDumpImpl implements HeapDump {
   private InboundCountReader inboundCountReader; // null until first retained-size query
   private io.jafar.hdump.index.RetainedSizeReader
       retainedSizeReader; // null until retained sizes computed
-  private io.jafar.hdump.index.ClassInstancesOffsetReader
-      classInstancesOffsetReader; // null if index not available
-  private io.jafar.hdump.index.ClassInstancesDataReader
-      classInstancesDataReader; // null if index not available
+  private ClassInstancesOffsetReader classInstancesOffsetReader; // null if index not available
+  private ClassInstancesDataReader classInstancesDataReader; // null if index not available
   private Long2IntOpenHashMap addressToId32; // 64-bit address -> 32-bit ID mapping
   private it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap
       classId32ToAddress; // 32-bit class ID -> 64-bit address (INDEXED mode)
@@ -404,29 +404,39 @@ public final class HeapDumpImpl implements HeapDump {
     // Load GC roots from index
     loadGcRoots();
 
-    // Load class-instances index if available (optional optimization index)
-    Path offsetIndexPath = indexDir.resolve(IndexFormat.CLASSINSTANCES_OFFSET_INDEX_NAME);
-    Path dataIndexPath = indexDir.resolve(IndexFormat.CLASSINSTANCES_DATA_INDEX_NAME);
-
-    if (Files.exists(offsetIndexPath) && Files.exists(dataIndexPath)) {
-      try {
-        classInstancesOffsetReader = new io.jafar.hdump.index.ClassInstancesOffsetReader(indexDir);
-        classInstancesDataReader = new io.jafar.hdump.index.ClassInstancesDataReader(indexDir);
-        LOG.debug("Loaded class-instances index for fast type-filtered queries");
-      } catch (IOException e) {
-        LOG.warn("Failed to load class-instances index: {}", e.getMessage());
-        classInstancesOffsetReader = null;
-        classInstancesDataReader = null;
-      }
-    } else {
-      LOG.debug("Class-instances index not available (will be built on first parse)");
-    }
+    openOptionalClassInstancesIndexes();
 
     LOG.debug(
         "Parsed {} classes, {} objects, {} GC roots (indexed mode)",
         classesById.size(),
         objectCount,
         gcRoots.size());
+  }
+
+  private void openOptionalClassInstancesIndexes() throws IOException {
+    Path offsetPath = indexDir.resolve(IndexFormat.CLASSINSTANCES_OFFSET_INDEX_NAME);
+    Path dataPath = indexDir.resolve(IndexFormat.CLASSINSTANCES_DATA_INDEX_NAME);
+    if (!Files.exists(offsetPath) || !Files.exists(dataPath)) {
+      LOG.debug("Class-instances index not available (will be built on first parse)");
+      return;
+    }
+
+    ClassInstancesOffsetReader offsets = null;
+    try {
+      offsets = new ClassInstancesOffsetReader(indexDir);
+      var data = new ClassInstancesDataReader(indexDir);
+      classInstancesOffsetReader = offsets;
+      classInstancesDataReader = data;
+    } catch (IOException | RuntimeException | Error failure) {
+      closeTracked(offsets, failure);
+      // Переходим к обычному поиску только после успешного освобождения mapping.
+      if (failure instanceof IOException && failure.getSuppressed().length == 0) {
+        LOG.warn("Failed to load class-instances index: {}", failure.getMessage());
+        return;
+      }
+      throw failure;
+    }
+    LOG.debug("Loaded class-instances index for fast type-filtered queries");
   }
 
   /**

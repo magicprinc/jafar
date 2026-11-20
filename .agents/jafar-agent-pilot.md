@@ -1,6 +1,6 @@
 # Jafar Agent Pilot — Implementation Plan
 
-> **Archived WIP; not a release plan.** The unfinished Java/Gradle and mapping work was saved on `wip/java25-hprof` rather than shipped. The supported route uses the official 0.29.0 artifact and the [on-demand profiling launcher](profiling/README.md). Sections below preserve the historical plan and test evidence, not current operating instructions.
+> **Archived WIP; not a release plan.** The unfinished Java/Gradle and mapping work was saved on `wip/java25-hprof` rather than shipped. The supported route uses the official 0.29.0 artifact and the on-demand launcher installed at `~/.agents/skills/java-performance/profiling/jafar_local.py` (see [local profiling](../doc/agents/LocalProfiling.md)). Sections below preserve the historical plan and test evidence, not current operating instructions.
 
 **Goal:** Give agents a tested, local, on-demand profiler quickly, then spend further effort on reported workflows and on demonstrated release blockers.
 

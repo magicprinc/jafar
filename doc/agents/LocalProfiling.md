@@ -2,6 +2,8 @@
 
 Local recipes for the JDK's `jfr` tool and Eclipse MAT. Prefer these for independent JFR checks and HPROF retention analysis. The `java-performance` skill routes agents to the installed tools and keeps detailed guidance out of routine work. The examples were exercised on synthetic local artifacts unless noted. For capabilities specific to Jafar see [Mcp.md](Mcp.md). Report which analyzer produced each result; do not treat different analyzers' counts or retention models as interchangeable.
 
+The Windows on-demand adapter, its tests, and synthetic fixtures live in the installed skill under `~/.agents/skills/java-performance/profiling/`, not in this checkout. See that directory's README to run verification from any directory. For live work use the existing skill's capture scripts; do not build this archived branch as part of profiling.
+
 ## What is installed (verified 2026-11-20)
 
 | Piece | Path | Version |
