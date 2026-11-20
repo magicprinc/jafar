@@ -1,0 +1,17 @@
+// Injected with `gradle -I` by jfr-capture.ps1. Not placed in the project: init scripts run as
+// an extra layer, so the build files and the git worktree stay untouched.
+//
+// Records every Test task that the invocation actually executes. maxParallelForks is forced to 1
+// because several forked JVMs would write to the same recording path.
+
+def recordingPath = providers.gradleProperty('jfr.out').orNull
+if (recordingPath != null) {
+	def normalized = new File(recordingPath).absolutePath.replace('\\', '/')
+	allprojects {
+		tasks.withType(Test).configureEach {
+			maxParallelForks = 1
+			forkEvery = 0
+			jvmArgs "-XX:StartFlightRecording=filename=${normalized},settings=profile,dumponexit=true,maxsize=256m"
+		}
+	}
+}
