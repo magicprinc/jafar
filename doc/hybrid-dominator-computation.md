@@ -47,6 +47,34 @@ try (HeapDump heap = HeapDumpParser.parse(heapDumpPath)) {
 }
 ```
 
+### Resource Ownership and Lifetime
+
+The example above uses try-with-resources, and that is the intended lifecycle: `HeapDump` must be
+closed when the analysis is finished.
+
+A `HeapDump` owns the resources it opens: the HPROF mapping and, for indexed dumps, the index
+readers it creates. On Java 25 these are scoped mappings backed by `Arena` and
+`FileChannel.map`; closing the dump releases them. Do not rely on garbage collection, finalization
+or a `Cleaner` to release them. If `close()` is forgotten, release is not deterministic: the mapped
+memory and other resources can remain allocated, and on Windows the mapped files can remain locked
+until the mapping is released or the JVM exits; deleting or replacing the dump or its index files
+can then fail.
+
+Objects and streams obtained from the dump are borrowed views, not independent data:
+
+- `HeapObject`, `HeapClass`, `GcRoot` and similar objects read from the dump's mappings.
+- Streams returned by `getObjects()`, `findObjects()`, `getObjectsOfClass(...)` and
+  `getOutboundReferences()` are lazy. Traverse, count, or collect them before closing the dump.
+  Returning or retaining a stream does not extend the dump's lifetime. Short-circuiting while the
+  dump is still open is fine.
+- Do not access an object or stream after the dump is closed, even if a reference to it remains.
+
+`HeapDump` and its objects are not thread-safe. Callers must provide external synchronization for
+all cross-thread access, including reads on one thread and `close()` on another. There is no
+concurrent-read guarantee and no safe close-during-read behavior.
+
+This section describes the HPROF API only; it does not define JFR parser or session semantics.
+
 ### Advanced: Class Patterns
 
 Include specific classes for exact computation:

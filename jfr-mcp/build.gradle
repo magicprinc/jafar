@@ -227,7 +227,7 @@ def fastutilClosurePatterns() {
     // -filter:none because jdeps hides same-package references by default, which dropped classes
     // only reachable from within their own package (Long2ObjectOpenHashMap$1 broke hdump_query).
     def proc = new ProcessBuilder(
-        [jdepsPath.path, '-verbose:class', '-filter:none', '--multi-release', '21']
+        [jdepsPath.path, '-verbose:class', '-filter:none', '--multi-release', '25']
             + classpathFiles.collect { it.path })
         .redirectErrorStream(false)
         .start()

@@ -53,28 +53,38 @@ public final class ClassInstancesDataReader implements AutoCloseable {
     Path indexFile = indexDir.resolve(IndexFormat.CLASSINSTANCES_DATA_INDEX_NAME);
 
     // Create memory-mapped buffer
-    buffer = CustomByteBuffer.map(indexFile, SPLICE_SIZE);
-    buffer.order(ByteOrder.BIG_ENDIAN);
+    CustomByteBuffer mapped = CustomByteBuffer.mapScoped(indexFile, SPLICE_SIZE);
+    try {
+      mapped.order(ByteOrder.BIG_ENDIAN);
 
-    // Read and validate header
-    int magic = buffer.getInt();
-    if (magic != IndexFormat.CLASSINSTANCES_DATA_MAGIC) {
-      throw new IOException(
-          String.format(
-              "Invalid classinstances-data.idx magic: 0x%08X (expected 0x%08X)",
-              magic, IndexFormat.CLASSINSTANCES_DATA_MAGIC));
+      // Read and validate header
+      int magic = mapped.getInt();
+      if (magic != IndexFormat.CLASSINSTANCES_DATA_MAGIC) {
+        throw new IOException(
+            String.format(
+                "Invalid classinstances-data.idx magic: 0x%08X (expected 0x%08X)",
+                magic, IndexFormat.CLASSINSTANCES_DATA_MAGIC));
+      }
+
+      this.formatVersion = mapped.getInt();
+      if (formatVersion != IndexFormat.FORMAT_VERSION) {
+        throw new IOException(
+            String.format(
+                "Unsupported format version: %d (expected %d)",
+                formatVersion, IndexFormat.FORMAT_VERSION));
+      }
+
+      this.totalInstances = mapped.getLong();
+      mapped.getInt(); // Reserved for future use
+      this.buffer = mapped;
+    } catch (IOException | RuntimeException | Error failure) {
+      try {
+        mapped.close();
+      } catch (IOException | RuntimeException | Error cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+      }
+      throw failure;
     }
-
-    formatVersion = buffer.getInt();
-    if (formatVersion != IndexFormat.FORMAT_VERSION) {
-      throw new IOException(
-          String.format(
-              "Unsupported format version: %d (expected %d)",
-              formatVersion, IndexFormat.FORMAT_VERSION));
-    }
-
-    totalInstances = buffer.getLong();
-    buffer.getInt(); // Reserved for future use
   }
 
   /**
@@ -83,6 +93,10 @@ public final class ClassInstancesDataReader implements AutoCloseable {
    * <p>The offset is specified in number of int32 values (not bytes) from the start of the data
    * section. For example, offset 0 reads the first instance ID, offset 1000 reads the 1001st
    * instance ID.
+   *
+   * <p>The returned stream is lazy: it reads from this reader's mapped buffer, so its traversal
+   * must occur before this reader is closed. Short-circuiting operations (for example {@code
+   * findFirst()}) are valid.
    *
    * @param offset position in the data file (in number of int32 values, not bytes)
    * @param count number of instance IDs to read

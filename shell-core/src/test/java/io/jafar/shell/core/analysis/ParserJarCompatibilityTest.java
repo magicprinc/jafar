@@ -3,6 +3,7 @@ package io.jafar.shell.core.analysis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.jafar.parser.api.JafarRecordedEvent;
 import io.jafar.parser.api.ParserContext;
 import io.jafar.parser.impl.UntypedParserContextFactory;
 import io.jafar.parser.internal_api.ChunkHeader;
@@ -18,7 +19,17 @@ import org.junit.jupiter.api.Test;
 
 class ParserJarCompatibilityTest {
   @Test
-  @DisplayName("Multi-release JAR сохраняет доступный в базовом API метод wrap")
+  @DisplayName("JAR на Java 25 сохраняет record для снимка события")
+  void eventSnapshotRemainsARecordInTheParserJar() throws Exception {
+    Path source =
+        Path.of(
+            JafarRecordedEvent.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+    assertTrue(Files.isRegularFile(source), "the parser must be loaded from its built JAR");
+    assertTrue(JafarRecordedEvent.class.isRecord());
+  }
+
+  @Test
+  @DisplayName("Parser JAR позволяет читать байты через wrap")
   void byteArrayWrappingWorksFromTheActualParserJar() throws Exception {
     Path source =
         Path.of(CustomByteBuffer.class.getProtectionDomain().getCodeSource().getLocation().toURI());
@@ -34,7 +45,7 @@ class ParserJarCompatibilityTest {
   }
 
   @Test
-  @DisplayName("Чтение JFR из InputStream работает с multi-release JAR")
+  @DisplayName("Parser JAR читает JFR из InputStream")
   void inputStreamParsingUsesTheJarImplementation() throws Exception {
     Path source =
         Path.of(CustomByteBuffer.class.getProtectionDomain().getCodeSource().getLocation().toURI());

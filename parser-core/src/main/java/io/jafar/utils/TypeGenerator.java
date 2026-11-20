@@ -8,12 +8,10 @@ import io.jafar.parser.internal_api.metadata.MetadataClass;
 import io.jafar.parser.internal_api.metadata.MetadataEvent;
 import io.jafar.parser.internal_api.metadata.MetadataField;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 import jdk.jfr.EventType;
@@ -99,14 +97,11 @@ public final class TypeGenerator {
                   Path target = output.resolve(className + ".java");
                   String typeContent = generateTypeFromEvent(et, generated);
                   if (!Files.exists(target)) {
-                    Files.write(
-                        target,
-                        typeContent.getBytes(StandardCharsets.UTF_8),
-                        StandardOpenOption.CREATE_NEW);
+                    Files.writeString(target, typeContent, StandardOpenOption.CREATE_NEW);
                   } else if (overwrite) {
-                    Files.write(
+                    Files.writeString(
                         target,
-                        typeContent.getBytes(StandardCharsets.UTF_8),
+                        typeContent,
                         StandardOpenOption.CREATE,
                         StandardOpenOption.TRUNCATE_EXISTING);
                   }
@@ -163,13 +158,10 @@ public final class TypeGenerator {
       String targetName = isPrimitiveName(typeName) ? typeName : getClassNameFromFullName(typeName);
       Path target = output.resolve(targetName + ".java");
       if (!Files.exists(target)) {
-        Files.write(target, data.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE_NEW);
+        Files.writeString(target, data, StandardOpenOption.CREATE_NEW);
       } else if (overwrite) {
-        Files.write(
-            target,
-            data.getBytes(StandardCharsets.UTF_8),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.TRUNCATE_EXISTING);
+        Files.writeString(
+            target, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
       }
     }
   }
@@ -252,23 +244,18 @@ public final class TypeGenerator {
     if (isAnnotation(metadataClass) || isSettingControl(metadataClass)) {
       return;
     }
-    String className = metadataClass.getName();
-    if (processed.contains(className)) {
+    if (!processed.add(metadataClass.getName())) {
       return;
     }
-    processed.add(className);
     try {
       Path classFile = output.resolve(getClassName(metadataClass) + ".java");
       String classContent = generateClass(metadataClass, processed);
       if (!Files.exists(classFile)) {
-        Files.write(
-            classFile,
-            classContent.getBytes(StandardCharsets.UTF_8),
-            StandardOpenOption.CREATE_NEW);
+        Files.writeString(classFile, classContent, StandardOpenOption.CREATE_NEW);
       } else if (overwrite) {
-        Files.write(
+        Files.writeString(
             classFile,
-            classContent.getBytes(StandardCharsets.UTF_8),
+            classContent,
             StandardOpenOption.CREATE,
             StandardOpenOption.TRUNCATE_EXISTING);
       }
@@ -293,8 +280,7 @@ public final class TypeGenerator {
       }
       MetadataClass fldType = field.getType();
       while (fldType.isSimpleType()) {
-        List<MetadataField> fl = fldType.getFields();
-        fldType = fl.get(0).getType();
+        fldType = fldType.getFields().getFirst().getType();
       }
       // Recursively generate nested types, but only if not already processed/being processed
       // This prevents infinite recursion when there are circular type references
@@ -302,10 +288,7 @@ public final class TypeGenerator {
         writeClass(fldType, processed);
       }
       sb.append(getClassName(fldType));
-      int dims = Math.max(0, field.getDimension());
-      for (int i = 0; i < dims; i++) {
-        sb.append("[]");
-      }
+      sb.append("[]".repeat(Math.max(0, field.getDimension())));
       sb.append(" ");
       sb.append(fldName).append("();\n");
     }

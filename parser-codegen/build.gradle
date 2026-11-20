@@ -24,8 +24,7 @@ repositories {
 
 java {
     toolchain {
-        // Target Java 8 bytecode (matching core parser module)
-        languageVersion = JavaLanguageVersion.of(8)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -67,15 +66,15 @@ configurations {
     }
 }
 
-// Allow test sources to use a newer language level while main targets 8
-def j21CompilerProvider = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
+// All parser tests use the same Java 25 toolchain as production.
+def j25CompilerProvider = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(25) }
 tasks.named('compileTestJava').configure { JavaCompile t ->
-    t.javaCompiler.set(j21CompilerProvider)
+    t.javaCompiler.set(j25CompilerProvider)
 }
 
-def j21LauncherProvider = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+def j25LauncherProvider = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
 tasks.named('test') {
-    javaLauncher.set(j21LauncherProvider)
+    javaLauncher.set(j25LauncherProvider)
     // The allocation tests need their own JVM args and the budget file; they run in allocationTest
     exclude 'io/jafar/parser/alloc/**'
     useJUnitPlatform()
@@ -87,26 +86,25 @@ tasks.named('test') {
     }
 }
 
-// Java 8 codegen smoke tests (compile to 8, run on JDK 8)
-def j8LauncherProvider = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(8) }
+// Retain the former Java 8 smoke tests, now compiled and run on Java 25.
 
 tasks.register('compileTest8JavaCompat', JavaCompile) {
     source = sourceSets.test8.java
     classpath = sourceSets.test8.compileClasspath
     destinationDirectory.set(layout.buildDirectory.dir("classes/java/test8"))
-    options.release.set(8)
-    javaCompiler.set(j21CompilerProvider)
+    options.release.set(25)
+    javaCompiler.set(j25CompilerProvider)
 }
 
 tasks.register('test8', Test) {
-    description = 'Runs codegen smoke tests on JDK 8.'
+    description = 'Runs the legacy codegen smoke tests on JDK 25.'
     group = 'verification'
     testClassesDirs = files(layout.buildDirectory.dir('classes/java/test8'))
     classpath = sourceSets.test8.runtimeClasspath + files(layout.buildDirectory.dir('classes/java/test8'))
     // The allocation tests need their own JVM args and the budget file; they run in allocationTest8
     exclude 'io/jafar/parser/alloc/**'
     shouldRunAfter tasks.named('test')
-    javaLauncher.set(j8LauncherProvider)
+    javaLauncher.set(j25LauncherProvider)
     dependsOn tasks.named('compileTest8JavaCompat')
     useJUnitPlatform()
     reports {
@@ -135,12 +133,12 @@ tasks.register('test8', Test) {
 def allocationBudgetsFile = rootProject.file('gradle/allocation-budgets.properties')
 
 tasks.register('allocationTest', Test) {
-    description = 'Asserts the typed parse of tck-test.jfr stays within its allocation budget (JDK 21).'
+    description = 'Asserts the typed parse of tck-test.jfr stays within its allocation budget (JDK 25).'
     group = 'verification'
     testClassesDirs = sourceSets.test.output
     classpath = sourceSets.test.runtimeClasspath
     include 'io/jafar/parser/alloc/**'
-    javaLauncher.set(j21LauncherProvider)
+    javaLauncher.set(j25LauncherProvider)
     useJUnitPlatform()
     jvmArgs '-XX:ActiveProcessorCount=4', '-Xmx2g', '-XX:TieredStopAtLevel=1'
     systemProperty 'jafar.alloc.budgets', allocationBudgetsFile.absolutePath
@@ -156,16 +154,14 @@ tasks.register('allocationTest', Test) {
     }
 }
 
-// Same gate in the JDK 8 cell, modelled on `test8`: the test8 source set (compiled to Java 8
-// bytecode by compileTest8JavaCompat) run on the JDK 8 launcher. test8Implementation extendsFrom
-// testImplementation, so the test-support dependency below reaches this classpath too.
+// Retain the legacy test8 allocation assertions on the Java 25 runtime.
 tasks.register('allocationTest8', Test) {
-    description = 'Asserts the typed parse of tck-test.jfr stays within its allocation budget (JDK 8).'
+    description = 'Asserts the typed parse of tck-test.jfr stays within its allocation budget (legacy test8 on JDK 25).'
     group = 'verification'
     testClassesDirs = files(layout.buildDirectory.dir('classes/java/test8'))
     classpath = sourceSets.test8.runtimeClasspath + files(layout.buildDirectory.dir('classes/java/test8'))
     include 'io/jafar/parser/alloc/**'
-    javaLauncher.set(j8LauncherProvider)
+    javaLauncher.set(j25LauncherProvider)
     dependsOn tasks.named('compileTest8JavaCompat')
     useJUnitPlatform()
     jvmArgs '-XX:ActiveProcessorCount=4', '-Xmx2g', '-XX:TieredStopAtLevel=1'
@@ -181,13 +177,13 @@ tasks.register('allocationTest8', Test) {
 }
 
 tasks.named('check') {
-    // `build` runs the JDK 21 allocation cell; allocationTest8 runs in the CI JDK 8 cell
+    // Keep the existing allocation gate in the normal build.
     dependsOn tasks.named('allocationTest')
 }
 
 // JMH benchmark compilation
 tasks.named('compileJmhJava').configure { JavaCompile t ->
-    t.javaCompiler.set(j21CompilerProvider)
+    t.javaCompiler.set(j25CompilerProvider)
 }
 
 dependencies {
@@ -229,7 +225,7 @@ tasks.register('jmh', JavaExec) {
     dependsOn compileJmhJava, testClasses
     classpath = sourceSets.jmh.runtimeClasspath
     mainClass.set('org.openjdk.jmh.Main')
-    javaLauncher.set(j21LauncherProvider)
+    javaLauncher.set(j25LauncherProvider)
     workingDir = rootProject.projectDir
 
     if (project.hasProperty('jmhArgs')) {

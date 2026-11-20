@@ -48,18 +48,24 @@ public final class HprofReader implements Closeable {
     this.path = path;
     this.ownsBuffer = true;
 
-    // Use SplicedMappedByteBuffer to handle files of any size
-    this.buffer = CustomByteBuffer.map(path, SPLICE_SIZE);
-    this.buffer.order(ByteOrder.BIG_ENDIAN); // HPROF is always big-endian
-
-    // Parse header
-    this.formatVersion = readFormatString();
-    this.idSize = buffer.getInt();
-    if (idSize != 4 && idSize != 8) {
-      throw new IOException("Invalid identifier size: " + idSize);
+    this.buffer = CustomByteBuffer.mapScoped(path, SPLICE_SIZE);
+    try {
+      this.buffer.order(ByteOrder.BIG_ENDIAN); // HPROF is always big-endian
+      this.formatVersion = readFormatString();
+      this.idSize = buffer.getInt();
+      if (idSize != 4 && idSize != 8) {
+        throw new IOException("Invalid identifier size: " + idSize);
+      }
+      this.timestamp = buffer.getLong();
+      this.headerSize = (int) buffer.position();
+    } catch (IOException | RuntimeException | Error failure) {
+      try {
+        buffer.close();
+      } catch (IOException | RuntimeException | Error cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+      }
+      throw failure;
     }
-    this.timestamp = buffer.getLong();
-    this.headerSize = (int) buffer.position();
   }
 
   /** Private constructor for view instances created by {@link #createView()}. */

@@ -2,6 +2,7 @@ package io.jafar.utils;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.foreign.Arena;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -43,7 +44,9 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
   private final boolean nativeOrder;
 
   /** Array of memory-mapped byte buffer segments. */
-  private final MappedByteBuffer[] splices;
+  private final ByteBuffer[] splices;
+
+  private final Arena arena;
 
   /**
    * Constructs a new SplicedMappedByteBuffer with the specified parameters.
@@ -56,13 +59,14 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
    * @param nativeOrder whether to use native byte order
    */
   SplicedMappedByteBuffer(
-      MappedByteBuffer[] splices,
+      ByteBuffer[] splices,
       int spliceSize,
       int sliceOffset,
       int sliceIndex,
       long limit,
       boolean nativeOrder) {
     this.splices = splices;
+    this.arena = null;
     this.index = sliceIndex;
     this.offset = sliceOffset;
     this.spliceSize = spliceSize;
@@ -79,6 +83,7 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
    * @throws IOException if an I/O error occurs during file mapping
    */
   SplicedMappedByteBuffer(Path file, int spliceSize) throws IOException {
+    this.arena = null;
     this.sliceBase = 0;
     this.spliceSize = spliceSize;
     limit = Files.size(file);
@@ -102,6 +107,34 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  SplicedMappedByteBuffer(Path file, int spliceSize, Arena arena) throws IOException {
+    this.arena = arena;
+    this.sliceBase = 0;
+    this.spliceSize = spliceSize;
+    this.limit = Files.size(file);
+    long count = (limit - 1) / spliceSize + 1;
+    if (count > Integer.MAX_VALUE) {
+      throw new IOException("Too many mapped segments: " + count);
+    }
+    this.splices = new ByteBuffer[(int) count];
+    boolean inOrder = true;
+    try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r");
+        FileChannel channel = raf.getChannel()) {
+      long remaining = limit;
+      for (int i = 0; i < count; i++) {
+        int length = (int) Math.min(spliceSize, remaining);
+        ByteBuffer segment =
+            channel
+                .map(FileChannel.MapMode.READ_ONLY, (long) i * spliceSize, length, arena)
+                .asByteBuffer();
+        inOrder &= segment.order() == ByteOrder.nativeOrder();
+        splices[i] = segment.order(ByteOrder.nativeOrder());
+        remaining -= length;
+      }
+    }
+    this.nativeOrder = inOrder;
   }
 
   /** {@inheritDoc} */
@@ -133,7 +166,7 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
   @Override
   public CustomByteBuffer order(ByteOrder order) {
     for (int i = 0; i < splices.length; i++) {
-      splices[i] = (MappedByteBuffer) splices[i].order(order);
+      splices[i].order(order);
     }
     return this;
   }
@@ -189,14 +222,7 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
     do {
       checkSpliceOffset();
       int toLoad = (int) Math.min(spliceSize - this.offset, length - loaded);
-      // Absolute bulk get with destination is unavailable on older JDKs; emulate
-      int oldPos = splices[index].position();
-      try {
-        splices[index].position(this.offset);
-        splices[index].get(buffer, offset + loaded, toLoad);
-      } finally {
-        splices[index].position(oldPos);
-      }
+      splices[index].get(this.offset, buffer, offset + loaded, toLoad);
       loaded += toLoad;
       this.offset += toLoad;
     } while (loaded < length);
@@ -307,9 +333,7 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
   /** {@inheritDoc} */
   @Override
   public void reset() {
-    position = mark;
-    index = (int) ((position + sliceBase) / spliceSize);
-    offset = (int) ((position + sliceBase) % spliceSize);
+    position(mark);
   }
 
   /** {@inheritDoc} */
@@ -360,7 +384,9 @@ public final class SplicedMappedByteBuffer implements CustomByteBuffer {
 
   /** {@inheritDoc} */
   @Override
-  public void close() throws IOException {
-    // MappedByteBuffers are unmapped by GC
+  public synchronized void close() throws IOException {
+    if (arena != null && arena.scope().isAlive()) {
+      arena.close();
+    }
   }
 }

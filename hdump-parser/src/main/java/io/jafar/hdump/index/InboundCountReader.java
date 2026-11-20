@@ -45,33 +45,43 @@ public final class InboundCountReader implements AutoCloseable {
   public InboundCountReader(Path indexDir) throws IOException {
     Path indexFile = indexDir.resolve(IndexFormat.INBOUND_INDEX_NAME);
 
-    buffer = CustomByteBuffer.map(indexFile, SPLICE_SIZE);
-    buffer.order(ByteOrder.BIG_ENDIAN);
+    CustomByteBuffer mapped = CustomByteBuffer.mapScoped(indexFile, SPLICE_SIZE);
+    try {
+      mapped.order(ByteOrder.BIG_ENDIAN);
 
-    // Read and validate header
-    int magic = buffer.getInt();
-    if (magic != IndexFormat.INBOUND_INDEX_MAGIC) {
-      throw new IOException(
-          String.format(
-              "Invalid inbound.idx magic: 0x%08X (expected 0x%08X)",
-              magic, IndexFormat.INBOUND_INDEX_MAGIC));
+      // Read and validate header
+      int magic = mapped.getInt();
+      if (magic != IndexFormat.INBOUND_INDEX_MAGIC) {
+        throw new IOException(
+            String.format(
+                "Invalid inbound.idx magic: 0x%08X (expected 0x%08X)",
+                magic, IndexFormat.INBOUND_INDEX_MAGIC));
+      }
+
+      this.formatVersion = mapped.getInt();
+      if (formatVersion != IndexFormat.FORMAT_VERSION) {
+        throw new IOException(
+            String.format(
+                "Unsupported format version: %d (expected %d)",
+                formatVersion, IndexFormat.FORMAT_VERSION));
+      }
+
+      long entryCountLong = mapped.getLong();
+      if (entryCountLong > Integer.MAX_VALUE) {
+        throw new IOException("Entry count exceeds Integer.MAX_VALUE: " + entryCountLong);
+      }
+      this.entryCount = (int) entryCountLong;
+
+      mapped.getInt(); // Reserved for future use
+      this.buffer = mapped;
+    } catch (IOException | RuntimeException | Error failure) {
+      try {
+        mapped.close();
+      } catch (IOException | RuntimeException | Error cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+      }
+      throw failure;
     }
-
-    formatVersion = buffer.getInt();
-    if (formatVersion != IndexFormat.FORMAT_VERSION) {
-      throw new IOException(
-          String.format(
-              "Unsupported format version: %d (expected %d)",
-              formatVersion, IndexFormat.FORMAT_VERSION));
-    }
-
-    long entryCountLong = buffer.getLong();
-    if (entryCountLong > Integer.MAX_VALUE) {
-      throw new IOException("Entry count exceeds Integer.MAX_VALUE: " + entryCountLong);
-    }
-    entryCount = (int) entryCountLong;
-
-    buffer.getInt(); // Reserved for future use
   }
 
   /**

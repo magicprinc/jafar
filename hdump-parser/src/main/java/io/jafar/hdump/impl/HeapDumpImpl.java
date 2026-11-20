@@ -24,6 +24,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import java.io.IOException;
+import java.lang.foreign.Arena;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -167,18 +168,30 @@ public final class HeapDumpImpl implements HeapDump {
     }
 
     HprofReader reader = new HprofReader(path);
-    HeapDumpImpl dump = new HeapDumpImpl(path, reader, options);
-
-    if (options.parsingMode() == HeapDumpParser.ParsingMode.INDEXED) {
-      dump.parseTwoPass(progressCallback);
-    } else {
-      dump.parseRecords(progressCallback);
+    HeapDumpImpl dump = null;
+    try {
+      dump = new HeapDumpImpl(path, reader, options);
+      if (options.parsingMode() == HeapDumpParser.ParsingMode.INDEXED) {
+        dump.parseTwoPass(progressCallback);
+      } else {
+        dump.parseRecords(progressCallback);
+      }
+      if (options.computeDominators()) {
+        dump.computeDominators();
+      }
+      return dump;
+    } catch (IOException | RuntimeException | Error failure) {
+      try {
+        if (dump == null) {
+          reader.close();
+        } else {
+          dump.close();
+        }
+      } catch (IOException | RuntimeException | Error cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+      }
+      throw failure;
     }
-
-    if (options.computeDominators()) {
-      dump.computeDominators();
-    }
-    return dump;
   }
 
   private void parseRecords(HeapDumpParser.ProgressCallback progressCallback) throws IOException {
@@ -509,13 +522,21 @@ public final class HeapDumpImpl implements HeapDump {
    */
   private boolean validateIndexFile(Path indexFile, int expectedMagic) {
     try (var channel =
-        java.nio.channels.FileChannel.open(indexFile, java.nio.file.StandardOpenOption.READ)) {
+            java.nio.channels.FileChannel.open(indexFile, java.nio.file.StandardOpenOption.READ);
+        var arena = Arena.ofConfined()) {
       if (channel.size() < IndexFormat.HEADER_SIZE) {
         return false; // File too small to contain header
       }
 
+      // Короткоживущий mapping освобождается закрытием arena на выходе из try, включая return.
       var buffer =
-          channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, IndexFormat.HEADER_SIZE);
+          channel
+              .map(
+                  java.nio.channels.FileChannel.MapMode.READ_ONLY,
+                  0,
+                  IndexFormat.HEADER_SIZE,
+                  arena)
+              .asByteBuffer();
 
       // Check magic number
       int magic = buffer.getInt();
@@ -550,8 +571,13 @@ public final class HeapDumpImpl implements HeapDump {
     Path objectmapFile = indexDir.resolve(IndexFormat.OBJECTMAP_INDEX_NAME);
 
     try (var channel =
-        java.nio.channels.FileChannel.open(objectmapFile, java.nio.file.StandardOpenOption.READ)) {
-      var buffer = channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            java.nio.channels.FileChannel.open(
+                objectmapFile, java.nio.file.StandardOpenOption.READ);
+        var arena = Arena.ofConfined()) {
+      var buffer =
+          channel
+              .map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, channel.size(), arena)
+              .asByteBuffer();
 
       // Read header
       int magic = buffer.getInt();
@@ -986,8 +1012,13 @@ public final class HeapDumpImpl implements HeapDump {
     }
 
     try (var channel =
-        java.nio.channels.FileChannel.open(classmapFile, java.nio.file.StandardOpenOption.READ)) {
-      var buffer = channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            java.nio.channels.FileChannel.open(
+                classmapFile, java.nio.file.StandardOpenOption.READ);
+        var arena = Arena.ofConfined()) {
+      var buffer =
+          channel
+              .map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, channel.size(), arena)
+              .asByteBuffer();
 
       // Read header
       int magic = buffer.getInt();
@@ -1032,8 +1063,12 @@ public final class HeapDumpImpl implements HeapDump {
     }
 
     try (var channel =
-        java.nio.channels.FileChannel.open(gcrootsFile, java.nio.file.StandardOpenOption.READ)) {
-      var buffer = channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            java.nio.channels.FileChannel.open(gcrootsFile, java.nio.file.StandardOpenOption.READ);
+        var arena = Arena.ofConfined()) {
+      var buffer =
+          channel
+              .map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, channel.size(), arena)
+              .asByteBuffer();
 
       // Read header
       int magic = buffer.getInt();
@@ -2628,22 +2663,15 @@ public final class HeapDumpImpl implements HeapDump {
     // Release this thread's reader view (other threads' views are GC'd with the buffer)
     threadLocalReader.remove();
 
-    reader.close();
-    if (objectIndexReader != null) {
-      objectIndexReader.close();
-    }
-    if (inboundCountReader != null) {
-      inboundCountReader.close();
-    }
-    if (retainedSizeReader != null) {
-      retainedSizeReader.close();
-    }
-    if (classInstancesOffsetReader != null) {
-      classInstancesOffsetReader.close();
-    }
-    if (classInstancesDataReader != null) {
-      classInstancesDataReader.close();
-    }
+    // Пытаемся освободить все owned-ресурсы, даже если предыдущий close() упал: первый сбой
+    // пробрасываем без изменений, последующие добавляем ему как suppressed.
+    Throwable failure = null;
+    failure = closeTracked(reader, failure);
+    failure = closeTracked(objectIndexReader, failure);
+    failure = closeTracked(inboundCountReader, failure);
+    failure = closeTracked(retainedSizeReader, failure);
+    failure = closeTracked(classInstancesOffsetReader, failure);
+    failure = closeTracked(classInstancesDataReader, failure);
 
     // Clear object caches to free memory
     if (objectsByIdLru != null) {
@@ -2653,6 +2681,41 @@ public final class HeapDumpImpl implements HeapDump {
       objectsByIdUnbounded.clear();
     }
 
+    if (failure != null) {
+      rethrowCloseFailure(failure);
+    }
     LOG.debug("Closed heap dump and released {} cached objects", cachedObjects);
+  }
+
+  /**
+   * Закрывает ресурс, сохраняя первый сбой и подавляя последующие. Возвращённый {@link Throwable}
+   * пробрасывается вызывающим, поэтому identity исходного исключения не теряется.
+   */
+  private static Throwable closeTracked(AutoCloseable resource, Throwable failure) {
+    if (resource == null) {
+      return failure;
+    }
+    try {
+      resource.close();
+    } catch (Exception | Error closeFailure) {
+      if (failure == null) {
+        return closeFailure;
+      }
+      failure.addSuppressed(closeFailure);
+    }
+    return failure;
+  }
+
+  private static void rethrowCloseFailure(Throwable failure) throws IOException {
+    if (failure instanceof IOException ioFailure) {
+      throw ioFailure;
+    }
+    if (failure instanceof RuntimeException runtimeFailure) {
+      throw runtimeFailure;
+    }
+    if (failure instanceof Error errorFailure) {
+      throw errorFailure;
+    }
+    throw new IOException("Unexpected failure while closing heap dump", failure);
   }
 }

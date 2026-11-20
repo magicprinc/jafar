@@ -21,7 +21,7 @@ repositories {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(8)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -44,10 +44,6 @@ shadowJar {
     dependencies {
         include(project(':parser-core'))
         include(project(':parser-codegen'))
-    }
-    // parser-core is a Multi-Release JAR
-    manifest {
-        attributes('Multi-Release': 'true')
     }
 }
 

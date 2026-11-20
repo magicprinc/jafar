@@ -1,6 +1,8 @@
 plugins {
     id 'java'
     id 'com.gradleup.shadow' version '9.0.0'
+    id 'io.freefair.lombok' version '9.8.3'
+    id 'net.ltgt.errorprone' version '5.2.0'
 }
 
 // Per-plane tag-derived version (see gradle/version-from-tag.gradle)
@@ -8,7 +10,7 @@ apply from: rootProject.file('gradle/version-from-tag.gradle')
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -17,7 +19,16 @@ repositories {
     mavenLocal()
 }
 
+lombok {
+    version = '1.18.48'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone.disableWarningsInGeneratedCode = true
+}
+
 dependencies {
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
     implementation project(':parser-core')
     implementation 'org.snakeyaml:snakeyaml-engine:2.9'
     implementation 'org.slf4j:slf4j-api:2.0.16'

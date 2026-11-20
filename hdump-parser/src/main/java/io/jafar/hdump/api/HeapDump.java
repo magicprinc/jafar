@@ -13,7 +13,14 @@ import java.util.stream.Stream;
  * Represents a parsed heap dump. Provides access to classes, objects, GC roots, and heap
  * statistics.
  *
- * <p>Instances are created via {@link HeapDumpParser#parse(Path)}.
+ * <p>Instances are created via {@link HeapDumpParser#parse(Path)}. Callers must {@link #close()} an
+ * instance to release the mappings and other resources it owns. Objects and streams borrowed from
+ * the dump (for example {@link #getObjects()} or {@link HeapObject}) must not be accessed after the
+ * dump is closed.
+ *
+ * <p>Like {@link HeapDumpParser}, the dump and its objects are not thread-safe: callers must
+ * externally synchronize any cross-thread access, including access concurrent with {@link
+ * #close()}.
  */
 public interface HeapDump extends Closeable {
 

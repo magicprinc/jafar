@@ -2,8 +2,10 @@ package io.jafar.utils;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.foreign.Arena;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,10 +18,7 @@ import java.nio.file.Path;
  */
 public interface CustomByteBuffer {
   /**
-   * Wraps a byte array in a CustomByteBuffer with the same byte-order semantics as a memory-mapped
-   * JFR file: the returned buffer has {@link #isNativeOrder()} == false so that multi-byte reads in
-   * {@link io.jafar.parser.internal_api.RecordingStreamReader} apply the same byte-reversal that
-   * file-backed buffers use.
+   * Wraps a byte array with the same byte-order semantics as a memory-mapped JFR file.
    *
    * @param bytes the byte array to wrap
    * @return a custom byte buffer wrapping the array
@@ -56,6 +55,42 @@ public interface CustomByteBuffer {
           FileChannel channel = raf.getChannel()) {
         return new ByteBufferWrapper(channel.map(FileChannel.MapMode.READ_ONLY, 0, size));
       }
+    }
+  }
+
+  /**
+   * Maps a file with an explicitly owned lifetime. Closing the returned buffer releases its
+   * mapping; slices borrow that lifetime and must not be accessed after the owner is closed.
+   * Callers must externally synchronize reads and close across threads.
+   *
+   * @param path the file to map
+   * @param spliceSize maximum size of each mapped segment
+   * @return the owning buffer
+   * @throws IllegalArgumentException if spliceSize is not positive
+   * @throws IOException if the file cannot be mapped
+   */
+  static CustomByteBuffer mapScoped(Path path, int spliceSize) throws IOException {
+    if (spliceSize <= 0) {
+      throw new IllegalArgumentException("spliceSize must be positive");
+    }
+    long size = Files.size(path);
+    Arena arena = Arena.ofShared();
+    try {
+      if (size > spliceSize) {
+        return new SplicedMappedByteBuffer(path, spliceSize, arena);
+      }
+      try (RandomAccessFile file = new RandomAccessFile(path.toFile(), "r");
+          FileChannel channel = file.getChannel()) {
+        return new ByteBufferWrapper(
+            channel.map(FileChannel.MapMode.READ_ONLY, 0, size, arena).asByteBuffer(), arena);
+      }
+    } catch (IOException | RuntimeException | Error failure) {
+      try {
+        arena.close();
+      } catch (RuntimeException | Error cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+      }
+      throw failure;
     }
   }
 
@@ -213,23 +248,28 @@ public interface CustomByteBuffer {
    */
   void close() throws IOException;
 
-  /**
-   * Wrapper implementation of CustomByteBuffer using MappedByteBuffer.
-   *
-   * <p>This class provides a concrete implementation that delegates to a MappedByteBuffer while
-   * maintaining the CustomByteBuffer interface contract.
-   */
+  /** Wrapper implementation backed by a mapped or array-based {@link ByteBuffer}. */
   class ByteBufferWrapper implements CustomByteBuffer {
     private final ByteBuffer delegate;
     private final boolean nativeOrder;
+    private final Arena arena;
 
     /**
      * Constructs a new ByteBufferWrapper with the specified MappedByteBuffer.
      *
      * @param delegate the MappedByteBuffer to wrap
      */
+    public ByteBufferWrapper(MappedByteBuffer delegate) {
+      this((ByteBuffer) delegate);
+    }
+
     public ByteBufferWrapper(ByteBuffer delegate) {
+      this(delegate, null);
+    }
+
+    private ByteBufferWrapper(ByteBuffer delegate, Arena arena) {
       this.delegate = delegate;
+      this.arena = arena;
       this.nativeOrder = delegate.order() == ByteOrder.nativeOrder();
       delegate.order(ByteOrder.nativeOrder());
     }
@@ -241,16 +281,12 @@ public interface CustomByteBuffer {
 
     @Override
     public CustomByteBuffer slice(long pos, long len) {
-      ByteBuffer dup = delegate.duplicate();
-      dup.position((int) pos);
-      dup.limit((int) (pos + len));
-      return new ByteBufferWrapper(dup.slice());
+      return new ByteBufferWrapper(delegate.slice((int) pos, (int) len));
     }
 
     @Override
     public CustomByteBuffer slice() {
-      ByteBuffer dup = delegate.duplicate();
-      return new ByteBufferWrapper(dup.slice());
+      return new ByteBufferWrapper(delegate.slice());
     }
 
     @Override
@@ -368,8 +404,10 @@ public interface CustomByteBuffer {
     }
 
     @Override
-    public void close() throws IOException {
-      // MappedByteBuffers are unmapped by GC
+    public synchronized void close() throws IOException {
+      if (arena != null && arena.scope().isAlive()) {
+        arena.close();
+      }
     }
   }
 }

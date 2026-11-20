@@ -3,6 +3,8 @@ plugins {
     id 'java-test-fixtures'
     id 'maven-publish'
     id 'com.vanniktech.maven.publish'
+    id 'io.freefair.lombok' version '9.8.3'
+    id 'net.ltgt.errorprone' version '5.2.0'
 }
 
 // Per-plane tag-derived version (see gradle/version-from-tag.gradle)
@@ -18,7 +20,7 @@ repositories {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -38,7 +40,16 @@ configurations {
     }
 }
 
+lombok {
+    version = '1.18.48'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone.disableWarningsInGeneratedCode = true
+}
+
 dependencies {
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
     // Shared protobuf wire-format decoding (ProtoUtil)
     implementation project(':parser-core')
 
