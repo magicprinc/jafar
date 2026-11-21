@@ -47,3 +47,16 @@ python -I $jf jfr $rec --tool jfr_compare --baseline $before --limit 10
 - **Новый кейс/ограничение масштаба:** соберите измерения времени, памяти, объёма и пригодности результата. Предлагайте доработку только если она закрывает реальный повторяемый сценарий. При ошибке, неправильном ответе, orphan JVM или небезопасном побочном действии остановите эту ветку анализа и явно сообщите владельцу.
 
 **Готово**, когда другой человек может повторить измерение, понять, почему выбран этот инструмент, и отделить доказанный эффект от предположения. Не держите сессию или профилировщик открытыми ради передачи результатов.
+
+
+
+
+**What I'd do before calling it finished for agent use**
+========================================================
+
+- One real-workload drill on a non-trivial app: capture CPU, allocations and a heap dump; analyze with MAT and jvmlens; write the report. That validates scale and the whole loop.
+- Automate at least one successful capture and one successful bench in tests, not just validation paths.
+- Add a "check your environment" command/step that verifies paths, jar hashes, and fixture counts before an agent starts, so failures are caught before analysis.
+- Gradle/Maven capture modes and live attach to a real workload are unverified end to end. Attach worked against my 20-second toy JVM; that's not the same as a Spring service.
+
+Bottom line: the goal "give agents a large, working profiling toolset with a skill that explains it" is achieved. The goal "this is production-ready for arbitrary Java workloads" is not yet proven. If agents will use it on small-to-medium local artifacts and follow the routing, it will do real work today. If it's expected to carry weight on multi-GB heaps or flaky live services, treat this as a beta until the drill above is done.
