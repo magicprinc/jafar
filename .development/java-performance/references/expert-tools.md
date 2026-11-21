@@ -14,7 +14,7 @@ python -I $jf otlp $profile --tool otlp_use --args '{"resources":["cpu"]}'
 python -I $jf --tool jfr_help --args '{"topic":"pipeline"}'
 ```
 
-`--args` is one JSON object, not a shell command. Use `--describe <full-tool-name>` to see that tool's arguments from the installed JAR. Positional formats are `jfr`, `hdump`, `pprof`, `otlp`. Queries use `--query`; expert `--tool` mode uses `--args` instead. Help and describe take no artifact. `jfr_compare` takes the candidate as the positional file and baseline via `--baseline`; session IDs are not CLI inputs. Route comparisons in other formats through comparable captures and the relevant primary tool.
+`--args` is one JSON object, not a shell command. Use `--describe <full-tool-name>` to see that tool's arguments from the installed JAR. Positional formats are `jfr`, `hdump`, `pprof`, `otlp`. Queries use `--query`; without it each format counts its default unit (JFR execution samples, heap objects, pprof/OTLP samples). Expert `--tool` mode uses `--args` instead. Help and describe take no artifact. `jfr_compare` takes the candidate as the positional file and baseline via `--baseline`; session IDs are not CLI inputs. Route comparisons in other formats through comparable captures and the relevant primary tool.
 
 | Format | Available commands (prefix as shown) | When to choose them |
 |---|---|---|

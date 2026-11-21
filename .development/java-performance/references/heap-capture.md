@@ -85,7 +85,9 @@ if ((Get-Content -LiteralPath $out -TotalCount 1 -Encoding ascii) -notlike 'JAVA
 ```
 
 `scripts/jfr-capture.ps1 -Artifact heap` already applies two of the three checks (unique run
-directory, `JAVA PROFILE` header) and records `artifactVerdict` in its manifest.
+directory, `JAVA PROFILE` header) and records `artifactVerdict` in its manifest. The manifest also
+stores the launch command, and in attach mode the target's command line; those can carry `-D`
+values, so treat `*-run.json` like a `jps` listing and redact it before sharing.
 
 ## A look without a dump
 

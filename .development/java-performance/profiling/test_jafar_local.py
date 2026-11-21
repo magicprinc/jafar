@@ -102,6 +102,16 @@ def test_otlp_count_and_close_payload(tmp_path):
 
 
 @pytest.mark.skipif(not JAR.is_file(), reason="installed Jafar jar is absent")
+def test_hdump_default_query_counts_objects():
+    result = _run("hdump", _fixture("JAFAR_LOCAL_TEST_HDUMP"))
+
+    data = _json(result)
+    assert data["format"] == "hdump"
+    assert data["query"] == "objects | count()"
+    assert data["results"] == [{"count": 6}]
+
+
+@pytest.mark.skipif(not JAR.is_file(), reason="installed Jafar jar is absent")
 def test_malformed_query_fails_without_success_json():
     source = _fixture("JAFAR_LOCAL_TEST_JFR")
     result = _run("jfr", source, "--query", "events/[bad")

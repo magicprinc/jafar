@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from test_jafar_local import _fixture, _json, _run
+from test_jafar_local import JAR, _fixture, _json, _run
+
+pytestmark = pytest.mark.skipif(
+    not JAR.is_file(), reason="installed Jafar jar is absent"
+)
 
 
 @pytest.mark.parametrize(

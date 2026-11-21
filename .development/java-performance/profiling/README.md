@@ -15,7 +15,7 @@ $env:PYTHONDONTWRITEBYTECODE = '1'
 python -m pytest -q -p no:cacheprovider .
 ```
 
-The tests drive the launcher as a separate process against the official 0.29.0 JAR. Bundled fixtures are synthetic, not project captures. No repo, build cache, live JVM, or fixture generator is needed. Use the bundled files for acceptance; environment variables are optional overrides for equivalent synthetic data:
+The tests drive the launcher as a separate process against the official 0.29.0 JAR. `test_scripts.py` smoke-checks the PowerShell wrappers' argument validation and needs `pwsh` on `PATH`; those cases skip where `pwsh` is absent. Bundled fixtures are synthetic, not project captures. No repo, build cache, live JVM, or fixture generator is needed. Use the bundled files for acceptance; environment variables are optional overrides for equivalent synthetic data:
 
 | File | Evidence | Optional override |
 |---|---|---|

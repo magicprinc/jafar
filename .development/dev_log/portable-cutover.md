@@ -1,0 +1,8 @@
+# Profiling cutover after review
+
+Approved scope: fix reviewed medium+ findings, move toolkit out of Jafar checkout, report preservation needs. Baseline `1e178dcf`, clean and published. Leave the rest of archived Java migration and no-push rule unchanged. No checkout deletion.
+
+- Python: official schema integers are representationally 32-bit except JFR USE/TSA timestamp `startTime`/`endTime`; use real-JAR overflow rejection, normal bucket count, and timestamp acceptance checks. Do not modify the official JAR.
+- Java archive: corrupt only the optional data index magic synchronously after header preflight. Red must reach Windows deletion failure or prove fallback ownership; green must preserve object queries and release the sidecar without GC. Publish the pair only after both readers acquired, release the local offset on failed second open; propagate errors/cleanup failures. Gradle 9.9.1 cached distribution, existing isolated home and installed JDK25. Verify HPROF and targeted supporting gates, not a resurrected migration.
+- Installed skill `profiling/` is canonical and contains the launcher, tests, tiny synthetic fixtures, and local feedback. Remove obsolete duplicate after comparing hashes and updating references. A Git pointer replaces any repo-only operational instructions as appropriate. Test with a non-checkout cwd; refresh curated ZIP outside checkout and compare digests. No raw real captures, secrets or credential-bearing configs copied.
+- Compare remote and local refs, ignored project/worktree state and backup inputs. Final report only what must survive; remote Git recovery does not restore installed tool files or hidden local metadata.

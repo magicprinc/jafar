@@ -42,22 +42,27 @@ param(
 	[ValidateRange(3, 50)][int]$Blocks = 7,
 	[switch]$Jfr,
 	[string]$OutDir = (Join-Path $env:LOCALAPPDATA 'jfr-perf'),
-	[string]$Label = 'bench',
+	[ValidatePattern('^[A-Za-z0-9_.-]+$')][string]$Label = 'bench',
 	[switch]$KeepSources
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$java = (Get-Command 'java.exe' -ErrorAction Stop).Source
-$javac = (Get-Command 'javac.exe' -ErrorAction Stop).Source
+$javaHome = if ($env:JAVA_HOME) { $env:JAVA_HOME } else { Split-Path (Split-Path (Get-Command 'java.exe' -ErrorAction Stop).Source) }
+$java = Join-Path $javaHome 'bin\java.exe'
+$javac = Join-Path $javaHome 'bin\javac.exe'
+foreach ($tool in @($java, $javac)) {
+	if (-not (Test-Path -LiteralPath $tool)) { throw "JDK tool missing: $tool (set JAVA_HOME to a JDK 21+)" }
+}
 $harness = Join-Path $PSScriptRoot 'BenchMain.java'
 if (-not (Test-Path -LiteralPath $harness)) { throw "Harness source missing: $harness" }
 
 $source = (Resolve-Path -LiteralPath $VariantsPath -ErrorAction Stop).Path
 $variantText = Get-Content -LiteralPath $source -Raw
-if ($variantText -notmatch '\bclass\s+Variants\b') {
-	throw "$source must declare a default-package class named Variants."
+# BenchMain resolves methods with MethodHandles.publicLookup(), which cannot see a package-private class.
+if ($variantText -notmatch '\bpublic\s+(?:final\s+)?class\s+Variants\b') {
+	throw "$source must declare a default-package 'public class Variants' (package-private is invisible to the harness)."
 }
 
 if (-not $Names) {

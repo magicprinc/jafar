@@ -49,6 +49,7 @@ _TOOLS = frozenset(
 _MANAGED = frozenset({"sessionId", "baselineSessionId", "candidateSessionId"})
 _DEFAULT_QUERIES = {
     "jfr": "events/jdk.ExecutionSample | count()",
+    "hdump": "objects | count()",
     "pprof": "samples | count()",
     "otlp": "samples | count()",
 }

@@ -47,7 +47,7 @@ with `shallow_max: 65556` and `shallow_sum: 28 048 628` - that is the 400 x 64 K
 ```
 checkLeaks(detector="growing-collections")
 checkLeaks(detector="duplicate-strings")
-objects/instanceof/java.util.Map | waste() | sortBy(wastedBytes desc) | top(10, wastedBytes)
+objects/java.util.HashMap | waste() | top(10, wastedBytes)
 duplicates | sortBy(wastedBytes desc) | top(20)
 ```
 

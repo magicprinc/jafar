@@ -48,7 +48,9 @@ conclusion on it.
 
 ## When the fixes land
 
-Re-run the checks in this file after upgrading Jafar:
+Re-run the checks in this file after upgrading Jafar. The calls below use the upstream MCP tool
+signatures; through the launcher run `jfr $rec --tool jfr_tsa` and `hdump $dump --query '<HdumpPath>'`
+instead.
 
 ```powershell
 jfr_tsa(sessionId=...)                                  # expect totalThreads > 1

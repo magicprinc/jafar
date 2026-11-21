@@ -5,6 +5,7 @@ Default route: [java-performance](../SKILL.md). The toolchain is separate from t
 | Component | Installed path |
 |---|---|
 | BellSoft JDK 25 tools | `C:\Z\JDK\bin` |
+| Python 3.11+ (stdlib only) | on `PATH`; runs `profiling/jafar_local.py` and its tests |
 | jvmlens release 0.3.1 | `C:\Z\jvmlens\jvmlens-0.3.1.jar` |
 | Official Jafar 0.29.0 engine | `C:\Z\jafar\jfr-mcp-0.29.0.jar` |
 | Eclipse MAT 1.17 | `C:\Z\mat\MemoryAnalyzerc.exe` |
