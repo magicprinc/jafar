@@ -8,6 +8,7 @@ an active toolkit and nothing here is needed to run a profile.
 
 | File | What it records |
 |---|---|
+| `HANDOFF.md` | Continuation state for the next agent: current commit, verified toolchain, tests, copy-sync procedure, backlog and profiling-session intake workflow. |
 | `task.md` | Reconstructed task ledger: owner decisions and constraints, completed commits and their evidence, verification results and open questions. |
 | `portable-cutover.md` | Scope and decisions of the cutover that moved the launcher out of this checkout into the installed skill. |
 | `indexed-heap-report.md` | Analysis and test design for the HPROF indexed-mode cleanup fix (production change is in commits `9a900dc0` and `b4d13107`). |
