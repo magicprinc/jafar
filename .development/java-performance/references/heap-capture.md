@@ -15,16 +15,13 @@ Analysis of the resulting dumps lives in `recipes-heap.md`.
 ## Verify the target, never the executable name
 
 ```powershell
-jps -mlvV     # pid, main class and JVM flags of every JVM
-$targetPid = 27692
-Get-CimInstance Win32_Process -Filter "ProcessId=$targetPid" |
-	Select-Object ProcessId, CreationDate, CommandLine
-jcmd $targetPid VM.command_line
-jcmd $targetPid GC.heap_info     # used/committed before the dump
+# Set $targetPid from the owner or the process you started; confirm its identity and start time.
+Get-Process -Id $targetPid -ErrorAction Stop | Select-Object Id, ProcessName, StartTime
+jcmd $targetPid GC.heap_info     # used/committed before the dump, only after attach approval
 ```
 
-Verified: `jcmd <pid> VM.command_line` returns the full command line, and `GC.heap_info` reports
-`garbage-first heap total reserved 262144K, committed 262144K, used 30931K` plus region counts.
+Do not run `jps -mlvV` or `VM.command_line` in an agent transcript: they can disclose JVM arguments.
+`GC.heap_info` reports used/committed information without reading the command line.
 
 **Never `jcmd 0`.** `jcmd -h` states: "If the pid is 0, commands will be sent to all Java processes."
 
@@ -78,8 +75,11 @@ $code = $LASTEXITCODE
 $fi = Get-Item -LiteralPath $out -ErrorAction SilentlyContinue
 if (-not $fi) { throw "heap dump missing: $out (jcmd exit $code)" }
 if ($fi.LastWriteTime -lt $before) { throw "heap dump not rewritten: $out (jcmd exit $code)" }
-if ((Get-Content -LiteralPath $out -TotalCount 1 -Encoding ascii) -notlike 'JAVA PROFILE*') {
-	throw "not an HPROF file: $out"
+$prefix = [byte[]]::new(13)
+$stream = [IO.File]::OpenRead($out)
+try { $stream.ReadExactly($prefix, 0, $prefix.Length) } finally { $stream.Dispose() }
+if ([Text.Encoding]::ASCII.GetString($prefix) -ne 'JAVA PROFILE ') {
+	throw "not an uncompressed HPROF file: $out"
 }
 '{0} MiB, jcmd exit {1}' -f [math]::Round($fi.Length / 1MB, 2), $code
 ```

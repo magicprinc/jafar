@@ -15,11 +15,12 @@
 | Уже есть native `.jfr`; CPU или аллокации | jvmlens `cpu` / `memory`, компактный JSON | JDK `jfr summary` / `view` для сверки; Jafar `jfr_stackprofile`/граф/точный JfrPath при необходимости |
 | GC, блокировка, I/O или латентность | `jfr summary`, потом отчет jvmlens по симптому и размеру окна | Проверка нужных событий через JDK; Jafar `jfr_diagnose` или `jfr_use` для второй гипотезы |
 | Исключения, сравнение, граф, точный фильтр | Локальные команды Jafar (`references/expert-tools.md` в skill); `--describe` только для нужного инструмента | `jfr_compare` для двух сопоставимых JFR; не сравнивайте доли с wall-clock |
-| Что удерживает память | MAT: histogram → dominators / paths to GC roots → сравнение сопоставимых снимков | `hdump_report`/HdumpPath лишь для точечной эвристики на небольшом дампе; если heap стабилен при росте RSS, рассмотрите NMT |
+| Что удерживает память | MAT: histogram → dominators / paths to GC roots → сравнение сопоставимых снимков | `hdump_report`/HdumpPath для точечной проверки небольшого дампа |
+| Растёт RAM процесса, а Java heap стабилен | `references/tools.md`: working set, private bytes и `GC.heap_info` в одном окне | NMT, если включён при старте; не вычисляйте native memory вычитанием heap из working set |
 | Сырые pprof или OTLP **profiles** | Jafar: summary → один query / flamegraph / USE | Уточните типы samples, единицы и labels; счётчик строк не равен сумме весов |
 | JVM висит прямо сейчас | `jstall` или разрешённый `jcmd <pid> Thread.print` | Сравните несколько снимков; точное live-состояние — debugger только когда оно нужно |
 
-Все исполняемые пути и примеры лежат в `%USERPROFILE%\.agents\skills\java-performance`. Откройте только `references/local-analysis.md` (jvmlens/JDK/MAT), `references/expert-tools.md` (Jafar) или нужную более узкую справку. Capture — `scripts/jfr-capture.ps1`; измерение изолированных Java-вариантов — `scripts/jfr-bench.ps1` и `references/bench-contract.md`. PowerShell 7:
+Все исполняемые пути и примеры лежат в `%USERPROFILE%\.agents\skills\java-performance`. Откройте только `references/local-analysis.md` (jvmlens/JDK/MAT), `references/expert-tools.md` (Jafar) или нужную более узкую справку. Capture запуска/теста — `scripts/jfr-capture.ps1`; для согласованного live PID используйте `jcmd` из `references/tools.md`, не режим `attach`, который печатает аргументы JVM. Измерение изолированных Java-вариантов — `scripts/jfr-bench.ps1` и `references/bench-contract.md`. PowerShell 7:
 
 ```powershell
 $skill = Join-Path $env:USERPROFILE '.agents\skills\java-performance'
@@ -42,21 +43,11 @@ python -I $jf jfr $rec --tool jfr_compare --baseline $before --limit 10
 
 ## 4. Что сделать, если проблема в инструментарии, а не проекте
 
-- **Неверная команда/приоритет в skill:** воспроизведите на безопасном примере и исправьте одну каноническую инструкцию под `java-performance`, если вам разрешено менять общий skill. Не размножайте рекомендации по файлам. Перепроверьте новую команду на установленной версии и сценарий, где skill не должен вызываться.
-- **Баг/нехватка Jafar:** зафиксируйте выпуск, команду, ожидаемый и наблюдаемый минимальный результат на синтетике, последствия и обход. Запишите находку в `java-performance/profiling/bug_report.md` или `feature_request.md` рядом с установленной утилитой. Если править общий skill нельзя, положите запись в отчёт. Клон Jafar для этого не нужен. Не ждите upstream, если jvmlens/JDK/MAT уже отвечают на вопрос. Не публикуйте issue, не правьте общие настройки и не push без разрешения именно на это действие.
+- **Неверная команда/приоритет в skill:** по возможности воспроизведите на синтетике и запишите находку в отчёт, не меняя общую установку.
+- **Баг/нехватка Jafar:** зафиксируйте версию, команду без секретов, ожидаемый и фактический результат, последствия и обход в отчёте. Клон Jafar для этого не нужен. Не ждите upstream, если jvmlens/JDK/MAT уже отвечают на вопрос. Не публикуйте issue и не отправляйте изменения без отдельного разрешения.
 - **Новый кейс/ограничение масштаба:** соберите измерения времени, памяти, объёма и пригодности результата. Предлагайте доработку только если она закрывает реальный повторяемый сценарий. При ошибке, неправильном ответе, orphan JVM или небезопасном побочном действии остановите эту ветку анализа и явно сообщите владельцу.
 
 **Готово**, когда другой человек может повторить измерение, понять, почему выбран этот инструмент, и отделить доказанный эффект от предположения. Не держите сессию или профилировщик открытыми ради передачи результатов.
 
 
-
-
-**What I'd do before calling it finished for agent use**
-========================================================
-
-- One real-workload drill on a non-trivial app: capture CPU, allocations and a heap dump; analyze with MAT and jvmlens; write the report. That validates scale and the whole loop.
-- Automate at least one successful capture and one successful bench in tests, not just validation paths.
-- Add a "check your environment" command/step that verifies paths, jar hashes, and fixture counts before an agent starts, so failures are caught before analysis.
-- Gradle/Maven capture modes and live attach to a real workload are unverified end to end. Attach worked against my 20-second toy JVM; that's not the same as a Spring service.
-
-Bottom line: the goal "give agents a large, working profiling toolset with a skill that explains it" is achieved. The goal "this is production-ready for arbitrary Java workloads" is not yet proven. If agents will use it on small-to-medium local artifacts and follow the routing, it will do real work today. If it's expected to carry weight on multi-GB heaps or flaky live services, treat this as a beta until the drill above is done.
+**После профилирования:** если владелец отдельно поручил улучшить инструментарий, передайте санитизированные наблюдения и [HANDOFF.md](dev_log/HANDOFF.md). До этого общую установку не меняйте.

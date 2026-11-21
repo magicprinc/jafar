@@ -93,21 +93,23 @@ Caveat: `jdk.JavaMonitorEnter` fires only after the configured threshold (tens o
 
 ## 5. I/O and remote calls - the trap that matters
 
-Blocking socket I/O (`Socket`, `HttpURLConnection`, classic JDBC drivers) emits `jdk.SocketRead` /
-`jdk.SocketWrite` above the threshold. **NIO-based clients do not**: with `java.net.http.HttpClient`
-against a server that slept 50 ms per request, `jdk.SocketRead` had **0 events** while
-`jdk.ThreadPark` on `CompletableFuture$Signaller` accumulated ~14 s.
+Check the observed counts and the recording settings first. `jdk.SocketRead` / `jdk.SocketWrite`
+may be disabled, thresholded, throttled, outside the window, or not emitted by the particular
+I/O path. In one `java.net.http.HttpClient` lab run against a server that slept 50 ms per request,
+there were no `jdk.SocketRead` events while `jdk.ThreadPark` on `CompletableFuture$Signaller`
+accumulated ~14 s. That is an observation about that run, not a rule for all NIO clients.
 
-So:
-1. `jfr_list_types(filter="Socket", scan=true)` - if the count is 0, the client is NIO/non-blocking.
-2. Fall back to `jdk.ThreadPark` grouped by `parkedClass/name`, plus wall-clock: the parked time on
-   the client's future class is the remote-call wait.
-3. For a blocking driver, `events/jdk.SocketRead | groupBy(host, agg=sum, value=duration)` and the
-   same shape on `bytesRead` gives host-level attribution (field names `host`, `address`, `port`
-   exist in `jdk.SocketRead`; verify with `jfr_list_types` before relying on one).
+1. Check `jfr summary` or `jfr_list_types(filter="Socket", scan=true)`. Zero events do not identify
+   the transport or rule out network/DB waits.
+2. Group `jdk.ThreadPark` by `parkedClass/name` and inspect the caller stack and timing. Future
+   waits also arise from queues, pools and other local coordination. Correlate with the request,
+   client/DB timings or trace before attributing a wait to a dependency.
+3. If socket events are present, `events/jdk.SocketRead | groupBy(host, agg=sum, value=duration)` and
+   the same shape on `bytesRead` give host-level attribution; confirm schema and observed fields
+   first. Durations summed across concurrent threads can exceed the recording's wall time.
 
-Consequence for the diagnosis "database or code?": wall-clock parked/socket time attributed to the
-caller frame answers it; a purely CPU-bound recording with no such events rules the remote call out.
+CPU-only evidence cannot rule out remote waits. If one bounded capture lacks the necessary events,
+report that limitation rather than claiming the service is CPU-bound.
 
 ## 6. Exceptions
 

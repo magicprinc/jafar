@@ -21,17 +21,17 @@ the change workflow and keep this file's constraints.
 | Item | Value |
 |---|---|
 | Repository | `D:\REPO\github\jafar`, branch `wip/java25-hprof` |
-| HEAD | `fc4a4e82` — identical to `origin/wip/java25-hprof` (0 ahead / 0 behind); the tree was clean before this file was added, so it is the only new file until committed |
-| Installed skill (canonical) | `C:\Users\magic\.agents\skills\java-performance` — 30 files, 377 783 B |
+| Revision/worktree | Verify with `git status --short --branch` and `git rev-parse --short HEAD`; do not assume the historical revision still applies |
+| Installed skill (canonical) | `C:\Users\magic\.agents\skills\java-performance` |
 | Mirror (tracked) | `D:\REPO\github\jafar\.development\java-performance` — 30/30 byte-identical to installed |
 | Handoff for target-project work | `.development/TUNE_Profile.md` (also inside the ZIP) |
-| Curated backup | `C:\DOC_APR\home\TUNE_Profile-tools.zip` — 31 entries, current, entry names use `/` |
+| Curated backup | `C:\DOC_APR\home\TUNE_Profile-tools.zip` — skill, target assignment, and curated `dev_log/`; verify per §5 |
 | Working review directory | `~/.dsh/reviews/jafar-resume-20261120` — **deleted**; do not rely on it |
 | Test suite | 53 tests, ~40 s, 0 skipped when the Jafar JAR is present |
 
-The last commits are `0e90c16a` (audit fixes) and `fc4a4e82` (audit commentary appended to
-`TUNE_Profile.md`). The appended block in `TUNE_Profile.md` is prior audit prose — treat it as a
-backlog seed, not as verified current state.
+Earlier audit fixes are recorded below. The target brief is the assignment for the application;
+real-workload drills, capture/bench automation, environment checks and scale validation belong in
+this handoff's verification table and backlog, not in the target brief.
 
 **What was just fixed** (so you do not redo it): dead `TUNE_Profile.md` links in `agent-brief.md`
 and `opencode-handoff.md`; a heap recipe that used `instanceof/java.util.Map | waste()` (broken in
@@ -128,7 +128,8 @@ profiling/
 
 `.development/dev_log/` is Git-tracked history: `HANDOFF.md` (this file), `task.md` (reconstructed
 ledger), `portable-cutover.md`, `indexed-heap-report.md`, `audit_outgoing.py`, `generators/`,
-`README.md`. It is **not** part of the skill and not inside the ZIP.
+`README.md`. The curated ZIP includes these maintenance files under `dev_log/`, separate from the
+installed skill. Never copy them into the skill directory.
 
 **Bundled fixtures (synthetic):** `cpu.jfr` (274 execution samples), `exceptions.jfr` (3
 IllegalStateException throws), `profile.pb.gz` (CPU weights 7+11=18), `profile.otlp` (13+17+19=49),
@@ -154,11 +155,12 @@ Ruff classifies the sibling test imports differently when invoked from elsewhere
 Manual smoke (only what your change touches):
 
 ```powershell
-$jf = Join-Path $env:USERPROFILE '.agents\skills\java-performance\profiling\jafar_local.py'
-python -I $jf jfr  <fixture.jfr>            # {"count": 274}
-python -I $jf hdump <fixture.hprof>          # {"count": 6}
-python -I $jf pprof <profile.pb.gz>          # {"count": 2}
-python -I $jf otlp  <profile.otlp>           # {"count": 3}
+$toolkit = Join-Path $env:USERPROFILE '.agents\skills\java-performance\profiling'
+$jf = Join-Path $toolkit 'jafar_local.py'
+python -I $jf jfr   (Join-Path $toolkit 'fixtures\cpu.jfr')       # count: 274
+python -I $jf hdump (Join-Path $toolkit 'fixtures\heap.hprof')    # count: 6
+python -I $jf pprof (Join-Path $toolkit 'fixtures\profile.pb.gz') # count: 2
+python -I $jf otlp  (Join-Path $toolkit 'fixtures\profile.otlp')  # count: 3
 python -I $jf --describe jfr_stackprofile    # buckets minimum 1 / maximum 100
 ```
 
@@ -178,12 +180,15 @@ The installed skill is canonical. The mirror and the ZIP are snapshots for the p
 offline recovery.
 
 1. Edit only the installed skill.
-2. Copy every non-cache file to `.development/java-performance`, keeping relative paths; verify the
-   two trees have the same 30 files with identical SHA-256.
-3. Rebuild the ZIP with **forward-slash** entry names:
-   `java-performance/<relative path>` for every skill file, plus `TUNE_Profile.md` copied from
-   `.development/TUNE_Profile.md`. Exclude `__pycache__` and `.pytest_cache`. Verify every entry's
-   SHA-256 against its live file (31 entries).
+2. Sync the changed skill files to `.development/java-performance`, keeping relative paths. Compare
+   the path sets and SHA-256 across the two trees, excluding local caches.
+3. Generate the ZIP from the verified skill tree, `.development/TUNE_Profile.md`, and the curated
+   maintenance files tracked under `.development/dev_log/`. Use **forward-slash** entry names under
+   `java-performance/` and `dev_log/`, with `TUNE_Profile.md` at the root. Exclude caches, raw
+   application artifacts and unreviewed files. The installed bundle includes synthetic `cpu.jfr`,
+   `exceptions.jfr` and `heap.hprof` ignored by Git; preserve and verify them, and don't use
+   `git ls-files` alone as the skill manifest. Verify the exact path set and every file's SHA-256
+   against the source before replacing the previous ZIP; don't infer completeness from a file count.
 4. `git status` in the repo must show exactly the intended files; the owner commits and pushes.
 
 Do not edit only the mirror or only the ZIP. Do not add raw captures, secrets, or client configs to
@@ -301,7 +306,7 @@ Commit style (owner applies it): concise imperative, e.g. `Fix heap waste recipe
 
 1. Read this file, then `SKILL.md` and the reference your backlog item touches.
 2. Run the verification block; confirm 53 passed and Ruff/Pyright clean.
-3. Confirm installed == mirror (30/30 hashes) and ZIP == live + `TUNE_Profile.md` (31 entries).
+3. Verify the installed skill, mirror and curated ZIP against the exact path sets and hashes in §5.
 4. Ask the owner for the profiling-session evidence (Section 9) and the private artifact location.
 5. Pick the top backlog item; if it is the real-workload drill, do that before changing code.
 6. When done: sync copies, report results, leave the commit to the owner.

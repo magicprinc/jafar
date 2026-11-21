@@ -43,12 +43,26 @@ $matArgs = @('--launcher.ini', 'C:\Z\mat\MemoryAnalyzer.ini', '-data', $ownedWor
 | Leak suspects | `org.eclipse.mat.api:suspects` |
 | Overview (histogram, top consumers, threads) | `org.eclipse.mat.api:overview` |
 | Per-component memory | `org.eclipse.mat.api:top_components` |
-| Compare two dumps | `<before> ('-snapshot2=' + <after>) org.eclipse.mat.api:compare` |
-| Leak comparison | `<before> ('-baseline=' + <old>) org.eclipse.mat.api:suspects2` |
+| Compare two dumps | `$before ('-snapshot2="' + $after + '"') org.eclipse.mat.api:compare` |
+| Leak comparison (upstream syntax; not exercised here) | `$after ('-baseline="' + $before + '"') org.eclipse.mat.api:suspects2` |
 | Text output | add `-format=txt` (also `csv`), `-unzip`, `-limit=<n>` |
 | Keep garbage | `-keep_unreachable_objects` |
 
-A suspects report is a **lead**, not a verdict.
+For a comparison, preflight **both** plain HPROFs and use fresh report locations. Pass the second
+path with literal quotes inside the parameter; quoting just the PowerShell expression is not enough
+when MAT builds the nested histogram query. This PowerShell 7 form preserves the quotes:
+
+```powershell
+$second = '-snapshot2="' + $after + '"'
+& $mat @matArgs $before $second org.eclipse.mat.api:compare
+```
+
+Inspect the fresh `*_Comparison.zip`: check the HTML and the CSV rows, and treat `Error opening
+heap dump` or `Problem reported` as failure even with exit 0. Verify the sign before saying
+"growth": on MAT 1.17, this exact invocation with five `agent.Probe` objects in `$before` and six in
+`$after` reported `-1`, i.e. first minus second. Comparable workload/GC checkpoints matter more than
+clock time alone. A suspects report is a **lead**, not a verdict: inspect dominators and the relevant
+paths to GC roots, identify the owning reference and distinguish expected lifetime from growth.
 
 ## Query report: histogram and OQL
 
@@ -62,11 +76,8 @@ For OQL the **entire command must be a single argument**, with the statement in 
 quotes inside it:
 
 ```powershell
-$exe = 'C:\Z\mat\MemoryAnalyzerc.exe'
-$ini = 'C:\Z\mat\MemoryAnalyzer.ini'
 $oql = '-command=oql "SELECT * FROM java.util.HashMap h"'
-& $exe --launcher.ini $ini -consoleLog -nosplash -application org.eclipse.mat.api.parse `
-	$dump $oql '-limit=5' 'org.eclipse.mat.api:query'
+& $mat @matArgs $dump $oql '-limit=5' 'org.eclipse.mat.api:query'
 ```
 
 Verified result — 362 matching objects, 5 rows kept by `-limit`:
